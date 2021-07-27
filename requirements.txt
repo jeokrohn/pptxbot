@@ -9,3 +9,4 @@ webexteamssdk
 python-dotenv
 requests
 flask
+gunicorn
