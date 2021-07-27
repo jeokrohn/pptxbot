@@ -12,7 +12,7 @@ def read_color_map(zip_file: ZipFile, file_name: str) -> Tuple[str, Dict[str, st
     read color map from given theme file
     :param zip_file:
     :param file_name:
-    :return: therme name and dict to map from color name to RGB value
+    :return: theme name and dict to map from color name to RGB value
     """
     with zip_file.open(name=file_name) as theme_file:
         tree = etree.parse(theme_file)
@@ -52,7 +52,7 @@ PRE_MAP = {
 
 def convert(content, color_map):
     """
-    Convert a single XML. Replace all references to thmem colors with actual RGB colors
+    Convert a single XML. Replace all references to theme colors with actual RGB colors
     :param content: XML file contents
     :param color_map: color map from a PPT theme
     :return:
@@ -64,7 +64,7 @@ def convert(content, color_map):
         return content
 
     # find all rpr tags and make sure that there is a solidFill child
-    # if it's misssing, then create one with "schemeClr" "tx1"
+    # if it's missing, then create one with "schemeClr" "tx1"
     # this is to address text fields where no specific color has been applied and thus
     # the default tx1 applies
     rprs = root.xpath('//a:rPr', namespaces=nsmap)

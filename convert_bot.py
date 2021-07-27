@@ -6,21 +6,24 @@ Send a PPTX file to the bot and the bot will then convert all theme colors to RG
 the converted deck
 """
 
-from botsocket import BotSocket
+import asyncio
+import cgi
+import logging
+import os
+import tempfile
+import time
+from contextlib import contextmanager
+
+import requests
 from dotenv import load_dotenv
 from webexteamssdk import Message
 from webexteamssdk import WebexTeamsAPI
-import os
-import logging
-import asyncio
-import tempfile
-import requests
-import cgi
-import time
+
+from botsocket import BotSocket
 from webex_convert import convert_pptx_to_rgb
-from contextlib import contextmanager
 
 load_dotenv()
+
 
 class PPTBot(BotSocket):
     def __init__(self):
@@ -35,7 +38,7 @@ class PPTBot(BotSocket):
         await loop.run_in_executor(None, self.process_message_sync, message)
 
     @contextmanager
-    def get_file(self, file_url: str, room_id: str, api:WebexTeamsAPI)->requests.Response:
+    def get_file(self, file_url: str, room_id: str, api: WebexTeamsAPI) -> requests.Response:
         with requests.Session() as session:
             while True:
                 with session.get(url=file_url, headers={'Authorization': f'Bearer {self.access_token}'},
@@ -79,7 +82,7 @@ class PPTBot(BotSocket):
                                         text=f'Downloading {file_name}')
                     logging.debug(f'downloading {full_path}')
                     with open(full_path, mode='wb') as file:
-                        for chunk in response.iter_content(chunk_size=2*1024*1024):
+                        for chunk in response.iter_content(chunk_size=2 * 1024 * 1024):
                             logging.debug(f'{file_name}: got chunk, {len(chunk)} bytes')
                             file.write(chunk)
                 rgb_path = f'{os.path.splitext(full_path)[0]}_rgb.pptx'

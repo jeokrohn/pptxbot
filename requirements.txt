@@ -7,3 +7,4 @@ xmltodict
 aiohttp
 webexteamssdk
 python-dotenv
+requests

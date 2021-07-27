@@ -1,19 +1,20 @@
-from typing import Optional, Callable, List, Coroutine
 import asyncio
-import aiohttp
-import os
-import json
-import webexteamssdk
-import logging
-import functools
 import base64
-import cmd
+import functools
+import json
+import logging
+import os
+from typing import Optional, Callable, List, Coroutine
+
+import aiohttp
+import webexteamssdk
 
 WDM_DEVICES = 'https://wdm-a.wbx2.com/wdm/api/v1/devices'
 
 log = logging.getLogger(__name__)
 
 MessageCallback = Callable[[webexteamssdk.Message], Coroutine]
+
 
 class BotSocket:
     """
@@ -24,14 +25,13 @@ class BotSocket:
                  access_token: str,
                  device_name: Optional[str] = None,
                  message_callback: Optional[MessageCallback] = None,
-                 allowed_emails: List[str]=[]) -> None:
+                 allowed_emails: List[str] = None) -> None:
         self._token = access_token
         self._device_name = device_name or os.path.basename(os.path.splitext(__file__)[0])
         self._message_callback = message_callback
         self._session: Optional[aiohttp.ClientSession] = None
         self._api = webexteamssdk.WebexTeamsAPI(access_token=access_token)
-        self._allowed_emails = set(allowed_emails)
-
+        self._allowed_emails = set(allowed_emails or list())
 
     @property
     def auth(self):
@@ -84,7 +84,7 @@ class BotSocket:
         try:
             r = await self.get(url=f'https://api.ciscospark.com/v1/messages/{message_id}')
             return webexteamssdk.Message(r)
-        except Exception as e:
+        except Exception:
             return None
 
     def run(self):
@@ -120,34 +120,6 @@ class BotSocket:
             log.debug(f'Message from: {message.personEmail}')
             await self._message_callback(message)
             return
-            # Log details on message
-
-            # Find the command that was sent, if any
-            command = ""
-            for c in self._commands.items():
-                if message.text.find(c[0]) != -1:
-                    command = c[0]
-                    log.debug(f'Found command: {command}')
-                    # If a command was found, stop looking for others
-                    break
-
-            # Build the reply to the user
-            reply = ""
-
-            # Take action based on command
-            # If no command found, send the default_action
-            if command in [""] and self._default_action:
-                reply = await self.commands[self.default_action]["callback"](message)
-            elif command in self.commands.keys():
-                # noinspection PyCallingNonCallable
-                reply = await self.commands[command]["callback"](message)
-            else:
-                pass
-
-            # allow command handlers to craft their own Teams message
-            if reply:
-                loop.call_soon(functools.partial(self._api.messages.create, roomId=message.roomId, markdown=reply))
-            return
 
         async def as_run():
             """
@@ -182,70 +154,6 @@ class BotSocket:
 
         # run async code
         asyncio.run(as_run())
-
-    def add_command(self, command, help_message, callback):
-        """
-        Add a new command to the bot
-        :param command: The command string, example "/status"
-        :param help_message: A Help string for this command
-        :param callback: The function to run when this command is given
-        :return:
-        """
-        self._commands[command] = {"help": help_message, "callback": callback}
-
-    def remove_command(self, command):
-        """
-        Remove a command from the bot
-        :param command: The command string, example "/status"
-        :return:
-        """
-        del self._commands[command]
-
-    def extract_message(self, command, text):
-        """
-        Return message contents following a given command.
-        :param command: Command to search for.  Example "/echo"
-        :param text: text to search within.
-        :return:
-        """
-        cmd_loc = text.find(command)
-        message = text[cmd_loc + len(command) :]
-        return message
-
-    def set_greeting(self, callback):
-        """
-        Configure the response provided by the bot when no command is found.
-        :param callback: The function to run to create and return the greeting.
-        :return:
-        """
-        self.add_command(
-            command="/greeting", help_message="*", callback=callback
-        )
-        self.default_action = "/greeting"
-
-    # *** Default Commands included in Bot
-    async def send_help(self, message):
-        """
-        Construct a help message for users.
-        :param post_data:
-        :return:
-        """
-        message = "Hello!  "
-        message += "I understand the following commands:  \n"
-        for c in self._commands.items():
-            if c[1]["help"][0] != "*":
-                message += "* **%s**: %s \n" % (c[0], c[1]["help"])
-        return message
-
-    async def send_echo(self, message:webexteamssdk.Message):
-        """
-        Sample command function that just echos back the sent message
-        :param post_data:
-        :return:
-        """
-        # Get sent message
-        message = self.extract_message("/echo", message.text)
-        return message
 
 
 def handle_message(api: webexteamssdk.WebexTeamsAPI, message: webexteamssdk.Message) -> None:
