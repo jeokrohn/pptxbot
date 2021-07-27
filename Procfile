@@ -1,1 +1,1 @@
-worker: python convert_bot.py
+web: gunicorn convert_bot:bot --log-file -
