@@ -13,7 +13,7 @@ WDM_DEVICES = 'https://wdm-a.wbx2.com/wdm/api/v1/devices'
 
 log = logging.getLogger(__name__)
 
-MessageCallback = Callable[[webexteamssdk.Message], Coroutine]
+MessageCallback = Callable[[webexteamssdk.Message], None]
 
 
 class BotSocket:
@@ -23,11 +23,10 @@ class BotSocket:
 
     def __init__(self,
                  access_token: str,
-                 device_name: Optional[str] = None,
-                 message_callback: Optional[MessageCallback] = None,
+                 message_callback: Optional[MessageCallback],
                  allowed_emails: List[str] = None) -> None:
         self._token = access_token
-        self._device_name = device_name or os.path.basename(os.path.splitext(__file__)[0])
+        self._device_name = os.path.basename(os.path.splitext(__file__)[0])
         self._message_callback = message_callback
         self._session: Optional[aiohttp.ClientSession] = None
         self._api = webexteamssdk.WebexTeamsAPI(access_token=access_token)
@@ -87,6 +86,10 @@ class BotSocket:
         except Exception:
             return None
 
+    async def process_message(self, message: webexteamssdk.Message):
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._message_callback, message)
+
     def run(self):
         async def process(message: aiohttp.WSMessage, ignore_emails: List[str]) -> None:
             """
@@ -118,7 +121,7 @@ class BotSocket:
             if message is None:
                 return
             log.debug(f'Message from: {message.personEmail}')
-            await self._message_callback(message)
+            await self.process_message(message)
             return
 
         async def as_run():
@@ -154,23 +157,3 @@ class BotSocket:
 
         # run async code
         asyncio.run(as_run())
-
-
-def handle_message(api: webexteamssdk.WebexTeamsAPI, message: webexteamssdk.Message) -> None:
-    person: webexteamssdk.Person
-    person = api.people.get(message.personId)
-    message_id = base64.b64decode(message.id).split(b'/')[-1].decode()
-    log.debug(f'Got message ({message_id}) from {person.displayName} : {message.text}')
-
-
-if __name__ == '__main__':
-    access_token = 'ZjRhODVkZTgtOTY2NC00OTkxLWEyOGMtZjQyZGE3YjE5YjIwNDUzMTBiYzYtZDI3'
-    api = webexteamssdk.WebexTeamsAPI(access_token=access_token)
-
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s %(threadName)s %(name)-12s %(levelname)-8s %(message)s')
-    logging.getLogger('urllib3.connectionpool').setLevel(logging.INFO)
-    logging.getLogger('asyncio').setLevel(logging.INFO)
-    helper = BotSocket(access_token=access_token,
-                       message_callback=functools.partial(handle_message, api))
-    helper.run()
