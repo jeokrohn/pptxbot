@@ -1,0 +1,9 @@
+bs4
+lxml
+python-pptx
+cmd2
+gnureadline
+xmltodict
+aiohttp
+webexteamssdk
+python-dotenv
