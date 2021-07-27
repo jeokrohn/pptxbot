@@ -92,7 +92,6 @@ class PPTBot(BotSocket):
 
 
 if __name__ == '__main__':
-    print('Starting')
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(threadName)s %(levelname)s %(module)s %(message)s')
     bot = PPTBot()
     bot.run()
