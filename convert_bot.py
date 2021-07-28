@@ -6,16 +6,18 @@ Send a PPTX file to the bot and the bot will then convert all theme colors to RG
 the converted deck
 """
 
-import asyncio
 import cgi
-import logging
-import os
-import tempfile
-import time
-from contextlib import contextmanager
-import uuid
 import hashlib
 import hmac
+import logging
+import os
+import random
+import tempfile
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from typing import List, Callable
 
 import requests
 import webexteamssdk
@@ -25,12 +27,7 @@ from webexteamssdk import Message
 from webexteamssdk import WebexTeamsAPI
 
 import ngrokhelper
-from botsocket import BotSocket
 from webex_convert import convert_pptx_to_rgb
-
-from concurrent.futures import ThreadPoolExecutor
-
-from typing import List, Optional, Callable
 
 load_dotenv()
 
@@ -39,7 +36,7 @@ log = logging.getLogger(__name__)
 
 class BotMessageProcessor:
 
-    def __init__(self, access_token:str, **kwargs):
+    def __init__(self, access_token: str, **kwargs):
         self.access_token = access_token
 
     @contextmanager
@@ -143,6 +140,9 @@ class BotWebhook(Flask):
                                     resource='messages',
                                     event='created',
                                     secret=self._secret)
+                s = random.randint(1, 5)
+                log.debug(f'Waiting {s} s before validating hooks')
+                time.sleep(s)
                 continue
             else:
                 for hook in hooks[1:]:
@@ -155,6 +155,7 @@ class BotWebhook(Flask):
                                     name='messages.created',
                                     targetUrl=url)
                 break
+        log.debug('Done setting up the web hook')
 
     def process_incoming_message(self):
         """
@@ -212,7 +213,7 @@ class PPTBotWebHook(Flask, BotMessageProcessor):
         me = self._api.people.me()
         self.me_id = me.id
 
-    def setup_hooks(self, url:str):
+    def setup_hooks(self, url: str):
         api = WebexTeamsAPI(access_token=self.access_token)
         hooks: List[webexteamssdk.Webhook] = list(api.webhooks.list())
         log.debug(f'found {len(hooks)} webhooks. Deleting...')
@@ -251,8 +252,9 @@ class PPTBotWebHook(Flask, BotMessageProcessor):
     def run(self, host: str = '0.0.0.0', port: int = 5000):
         super().run(host=host, port=port)
 
+
 # base class for bot communication
-#bot_base = BotSocket
+# bot_base = BotSocket
 bot_base = BotWebhook
 
 
@@ -267,7 +269,7 @@ class PPTBot(bot_base, BotMessageProcessor):
         super().__init__(access_token=access_token, message_callback=self.process_message_sync)
 
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s $(processName)s %(threadName)s %(levelname)s %(module)s %('
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(processName)s %(threadName)s %(levelname)s %(module)s %('
                                                 'message)s')
 bot = PPTBot()
 
