@@ -125,22 +125,36 @@ class BotWebhook(Flask):
             "/", "index", self.process_incoming_message, methods=["POST"]
         )
         self._secret = str(uuid.uuid4())
-        self.setup_hooks(url=bot_url)
         self._api = WebexTeamsAPI(access_token=self.access_token)
         me = self._api.people.me()
         self.me_id = me.id
+        self._pool.submit(self.setup_hooks, url=bot_url)
 
     def setup_hooks(self, url: str):
         api = WebexTeamsAPI(access_token=self.access_token)
-        hooks: List[webexteamssdk.Webhook] = list(api.webhooks.list())
-        log.debug(f'found {len(hooks)} webhooks. Deleting...')
-        for hook in hooks:
-            api.webhooks.delete(webhookId=hook.id)
-        api.webhooks.create(name='messages.created',
-                            targetUrl=url,
-                            resource='messages',
-                            event='created',
-                            secret=self._secret)
+        while True:
+            hooks: List[webexteamssdk.Webhook] = list(api.webhooks.list())
+            log.debug(f'found {len(hooks)} webhooks')
+            if not hooks:
+                # create one
+                log.debug(f'create new webhook')
+                api.webhooks.create(name='messages.created',
+                                    targetUrl=url,
+                                    resource='messages',
+                                    event='created',
+                                    secret=self._secret)
+                continue
+            else:
+                for hook in hooks[1:]:
+                    log.debug(f'trying to delete webhook {hook.id}')
+                    try:
+                        api.webhooks.delete(webhookId=hook.id)
+                    except webexteamssdk.ApiError:
+                        pass
+                api.webhooks.update(webhookId=hooks[0].id,
+                                    name='messages.created',
+                                    targetUrl=url)
+                break
 
     def process_incoming_message(self):
         """
