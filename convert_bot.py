@@ -154,7 +154,9 @@ class BotWebhook(Flask):
                 api.webhooks.update(webhookId=hooks[0].id,
                                     name='messages.created',
                                     targetUrl=url)
-                break
+                if len(hooks) > 1:
+                    continue
+                self._secret = hooks[0].secret
         log.debug('Done setting up the web hook')
 
     def process_incoming_message(self):
@@ -184,70 +186,6 @@ class BotWebhook(Flask):
         message = self._api.messages.get(messageId=event.data.id)
         self._pool.submit(self._message_callback, message=message)
         return 'ok'
-
-
-class PPTBotWebHook(Flask, BotMessageProcessor):
-
-    def __init__(self):
-        super().__init__(import_name=__name__)
-        access_token = os.getenv('BOT_ACCESS_TOKEN')
-        if access_token is None:
-            raise Exception('access token needs to be defined in env variable BOT_ACCESS_TOKEN')
-        self.access_token = access_token
-
-        heroku_name = os.getenv('HEROKU_NAME')
-        if heroku_name is None:
-            log.debug('not running on Heroku. Creating Ngrok tunnel')
-            ngrok = ngrokhelper.NgrokHelper(port=5000)
-            bot_url = ngrok.start()
-        else:
-            log.debug(f'running on heroku as {heroku_name}')
-            bot_url = f'https://{heroku_name}.herokuapp.com'
-        log.debug(f'Webhook URL: {bot_url}')
-        self.add_url_rule(
-            "/", "index", self.process_incoming_message, methods=["POST"]
-        )
-        self._secret = str(uuid.uuid4())
-        self.setup_hooks(url=bot_url)
-        self._api = WebexTeamsAPI(access_token=self.access_token)
-        me = self._api.people.me()
-        self.me_id = me.id
-
-    def setup_hooks(self, url: str):
-        api = WebexTeamsAPI(access_token=self.access_token)
-        hooks: List[webexteamssdk.Webhook] = list(api.webhooks.list())
-        log.debug(f'found {len(hooks)} webhooks. Deleting...')
-        for hook in hooks:
-            api.webhooks.delete(webhookId=hook.id)
-        api.webhooks.create(name='messages.created',
-                            targetUrl=url,
-                            resource='messages',
-                            event='created',
-                            secret=self._secret)
-
-    def process_incoming_message(self):
-        """
-        Handle message.created events
-        :return:
-        """
-        # validate signature
-        raw = request.get_data()
-        # Let's create the SHA1 signature
-        # based on the request body JSON (raw) and our passphrase (key)
-        hashed = hmac.new(self._secret.encode(), raw, hashlib.sha1)
-        validatedSignature = hashed.hexdigest()
-        signature = request.headers.get('X-Spark-Signature')
-        if signature != validatedSignature:
-            log.warning('signature mismatch: ignore')
-            return
-        data = request.json
-        event = webexteamssdk.WebhookEvent(data)
-        if event.data.personId == self.me_id:
-            log.debug(f'ignoring message from self')
-            return
-        # get message
-        message = self._api.messages.get(messageId=event.data.id)
-        self.process_message_sync(message=message)
 
     def run(self, host: str = '0.0.0.0', port: int = 5000):
         super().run(host=host, port=port)
