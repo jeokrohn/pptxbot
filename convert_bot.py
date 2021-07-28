@@ -58,6 +58,7 @@ class BotMessageProcessor:
                     yield response
                     break
             else:
+                log.debug(f'{file_name} took too long to become available. Giving up...')
                 api.messages.create(roomId=room_id,
                                     text=f'{file_name} took too long to become available. Giving up...')
                 yield None
