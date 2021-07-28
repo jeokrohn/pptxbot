@@ -213,7 +213,7 @@ class PPTBot(bot_base, BotMessageProcessor):
         super().__init__(access_token=access_token, message_callback=self.process_message_sync)
 
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(process)d] %(threadName)s %(levelname)s %(module)s %('
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(process)d] %(threadName)s %(levelname)s %(name)s %('
                                                 'message)s')
 bot = PPTBot()
 
