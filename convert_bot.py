@@ -62,6 +62,7 @@ class BotMessageProcessor:
         api = WebexTeamsAPI(access_token=self.access_token)
         # we need a message w/ attachment
         if not message.files:
+            log.debug('message has no attachments')
             api.messages.create(roomId=message.roomId, text='Send me a PPTX file and I will return a converted version')
             return
         for file_url in message.files:
@@ -183,10 +184,14 @@ class BotWebhook(Flask):
         email = event.data.personEmail
         if self._allowed_emails and email not in self._allowed_emails:
             log.debug(f'{email} not allowed. Skipping message')
-        # get message
-        message = self._api.messages.get(messageId=event.data.id)
-        self._pool.submit(self._message_callback, message=message)
+        # get message and ..
+        self._pool.submit(self.get_message_details_and_call, message_id=event.data.id)
         return 'ok'
+
+    def get_message_details_and_call(self, message_id: str):
+        log.debug('Getting message details')
+        message = self._api.messages.get(messageId=message_id)
+        self._message_callback(message)
 
     def run(self, host: str = '0.0.0.0', port: int = 5000):
         super().run(host=host, port=port)
