@@ -215,6 +215,9 @@ class PPTBot(bot_base, BotMessageProcessor):
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(process)d] %(threadName)s %(levelname)s %(name)s %('
                                                 'message)s')
+logging.getLogger('urllib3.connectionpool').setLevel(logging.INFO)
+logging.getLogger('webexteamssdk.restsession').setLevel(logging.WARNING)
+
 bot = PPTBot()
 
 if __name__ == '__main__':
