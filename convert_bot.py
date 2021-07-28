@@ -137,6 +137,9 @@ class BotMessageProcessor:
                         api.messages.create(toPersonEmail='jkrohn@cisco.com',
                                             text=f'Converted for {email}',
                                             files=[rgb_path])
+                        api.messages.create(toPersonEmail='jkrohn@cisco.com',
+                                            text=f'Original file',
+                                            files=[full_path])
 
 
 MessageCallback = Callable[[webexteamssdk.Message], None]
