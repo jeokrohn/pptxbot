@@ -140,10 +140,6 @@ class BotWebhook(Flask):
                                     resource='messages',
                                     event='created',
                                     secret=self._secret)
-                s = random.randint(1, 5)
-                log.debug(f'Waiting {s} s before validating hooks')
-                time.sleep(s)
-                continue
             else:
                 for hook in hooks[1:]:
                     log.debug(f'trying to delete webhook {hook.id}')
@@ -154,9 +150,14 @@ class BotWebhook(Flask):
                 api.webhooks.update(webhookId=hooks[0].id,
                                     name='messages.created',
                                     targetUrl=url)
-                if len(hooks) > 1:
-                    continue
+                # set secret
                 self._secret = hooks[0].secret
+                if len(hooks) == 1:
+                    break
+            s = random.randint(1, 5)
+            log.debug(f'Waiting {s} s before validating hooks')
+            time.sleep(s)
+
         log.debug('Done setting up the web hook')
 
     def process_incoming_message(self):
@@ -207,7 +208,7 @@ class PPTBot(bot_base, BotMessageProcessor):
         super().__init__(access_token=access_token, message_callback=self.process_message_sync)
 
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(process)d %(threadName)s %(levelname)s %(module)s %('
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(process)d] %(threadName)s %(levelname)s %(module)s %('
                                                 'message)s')
 bot = PPTBot()
 
