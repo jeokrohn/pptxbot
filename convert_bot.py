@@ -42,7 +42,7 @@ class BotMessageProcessor:
     @contextmanager
     def get_file(self, file_url: str, room_id: str, api: WebexTeamsAPI) -> requests.Response:
         with requests.Session() as session:
-            while True:
+            for _ in range(10):
                 with session.get(url=file_url, headers={'Authorization': f'Bearer {api.access_token}'},
                                  stream=True) as response:
                     if response.status_code == 423:
@@ -57,10 +57,15 @@ class BotMessageProcessor:
                         continue
                     yield response
                     break
+            else:
+                api.messages.create(roomId=room_id,
+                                    text=f'{file_name} took too long to become available. Giving up...')
+                yield None
 
     def process_message_sync(self, message: Message):
         api = WebexTeamsAPI(access_token=self.access_token)
         # we need a message w/ attachment
+        log.debug(f'processing message from {message.personEmail}')
         if not message.files:
             log.debug('message has no attachments')
             api.messages.create(roomId=message.roomId, text='Send me a PPTX file and I will return a converted version')
@@ -68,14 +73,18 @@ class BotMessageProcessor:
         for file_url in message.files:
             with tempfile.TemporaryDirectory() as tempdir:
                 with self.get_file(file_url=file_url, room_id=message.roomId, api=api) as response:
+                    if response is None:
+                        continue
                     if response.status_code != 200:
                         log.debug(f'download failed: {response.status_code}/{response.reason}')
                         continue
                     cd_header = response.headers.get('content-disposition', None)
                     _, params = cgi.parse_header(cd_header)
                     file_name = params['filename']
+                    log.debug(f'processing {file_name}')
                     _, ext = os.path.splitext(file_name)
                     if ext.lower() != '.pptx':
+                        log.debug('wrong suffix')
                         api.messages.create(roomId=message.roomId,
                                             text=f'Send me a PPTX (and not {ext.upper()[1:]} file and I will '
                                                  f'return a converted version')
@@ -91,10 +100,12 @@ class BotMessageProcessor:
                 rgb_path = f'{os.path.splitext(full_path)[0]}_rgb.pptx'
                 api.messages.create(roomId=message.roomId,
                                     text=f'Converting {file_name}')
+                log.debug(f'converting {file_name}')
                 convert_pptx_to_rgb(full_path, rgb_path)
                 api.messages.create(roomId=message.roomId,
                                     text='Here is the converted PPTX',
                                     files=[rgb_path])
+                log.debug(f'shared {os.path.basename(rgb_path)}')
 
 
 MessageCallback = Callable[[webexteamssdk.Message], None]
