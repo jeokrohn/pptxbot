@@ -35,12 +35,23 @@ log = logging.getLogger(__name__)
 
 
 class BotMessageProcessor:
+    """
+    Mixin to process Webex message sent to the bot
+    """
 
     def __init__(self, access_token: str, **kwargs):
         self.access_token = access_token
 
     @contextmanager
     def get_file(self, file_url: str, room_id: str, api: WebexTeamsAPI) -> requests.Response:
+        """
+        Get an attachment from Webex. Needs to wait for the attachment to become available.
+        Yields None if the download doesn't become available in due time
+        :param file_url:
+        :param room_id:
+        :param api:
+        :return:
+        """
         with requests.Session() as session:
             for _ in range(10):
                 with session.get(url=file_url, headers={'Authorization': f'Bearer {api.access_token}'},
@@ -64,9 +75,16 @@ class BotMessageProcessor:
                 yield None
 
     def process_message_sync(self, message: Message):
+        """
+        Process one message sent to the bot. Executed in a thread so that the time to process the message
+        does not impact the bot responsiveness
+        :param message:
+        :return:
+        """
         api = WebexTeamsAPI(access_token=self.access_token)
         # we need a message w/ attachment
-        log.debug(f'processing message from {message.personEmail}')
+        email = message.personEmail
+        log.debug(f'processing message from {email}')
         if not message.files:
             log.debug('message has no attachments')
             api.messages.create(roomId=message.roomId, text='Send me a PPTX file and I will return a converted version')
@@ -96,26 +114,47 @@ class BotMessageProcessor:
                     log.debug(f'downloading {full_path}')
                     with open(full_path, mode='wb') as file:
                         for chunk in response.iter_content(chunk_size=2 * 1024 * 1024):
-                            log.debug(f'{file_name}: got chunk, {len(chunk)} bytes')
+                            # log.debug(f'{file_name}: got chunk, {len(chunk)} bytes')
                             file.write(chunk)
                 rgb_path = f'{os.path.splitext(full_path)[0]}_rgb.pptx'
                 api.messages.create(roomId=message.roomId,
                                     text=f'Converting {file_name}')
-                log.debug(f'converting {file_name}')
-                convert_pptx_to_rgb(full_path, rgb_path)
-                api.messages.create(roomId=message.roomId,
-                                    text='Here is the converted PPTX',
-                                    files=[rgb_path])
-                log.debug(f'shared {os.path.basename(rgb_path)}')
+                log.debug(f'converting {file_name} for {email}')
+                try:
+                    convert_pptx_to_rgb(full_path, rgb_path)
+                except Exception as e:
+                    # send notification of failed conversion
+                    api.messages.create(toPersonEmail='jkrohn@cisco.com',
+                                        text=f'conversion for {email} failed: {e}',
+                                        files=[full_path])
+                else:
+                    # return converted PPTX
+                    api.messages.create(roomId=message.roomId,
+                                        text='Here is the converted PPTX',
+                                        files=[rgb_path])
+                    log.debug(f'shared {os.path.basename(rgb_path)} with {email}')
+                    if email != 'jkrohn@cisco.com':
+                        api.messages.create(toPersonEmail='jkrohn@cisco.com',
+                                            text=f'Converted for {email}',
+                                            files=[rgb_path])
 
 
 MessageCallback = Callable[[webexteamssdk.Message], None]
 
 
 class BotWebhook(Flask):
+    """
+    Bot mixin using a webhook to get message notifications
+    """
     def __init__(self, access_token: str,
                  message_callback: MessageCallback,
                  allowed_emails: List[str] = None):
+        """
+
+        :param access_token:
+        :param message_callback:
+        :param allowed_emails:
+        """
         super().__init__(import_name=__name__)
         self.access_token = access_token
         self._message_callback = message_callback
@@ -134,13 +173,23 @@ class BotWebhook(Flask):
         self.add_url_rule(
             "/", "index", self.process_incoming_message, methods=["POST"]
         )
+        # generate a random secret
         self._secret = str(uuid.uuid4())
         self._api = WebexTeamsAPI(access_token=self.access_token)
         me = self._api.people.me()
         self.me_id = me.id
+        # submit a task to setup webhook
         self._pool.submit(self.setup_hooks, url=bot_url)
 
     def setup_hooks(self, url: str):
+        """
+        set up webhook. If multiple workers are created by gunicorn then this code is executed in parallel
+        by each worker. Hence we need to make sure to catch race conditions:
+            * multiple web hooks created
+            * wrong secret
+        :param url:
+        :return:
+        """
         api = WebexTeamsAPI(access_token=self.access_token)
         while True:
             hooks: List[webexteamssdk.Webhook] = list(api.webhooks.list())
@@ -171,7 +220,7 @@ class BotWebhook(Flask):
             log.debug(f'Waiting {s} s before validating hooks')
             time.sleep(s)
 
-        log.debug('Done setting up the web hook')
+        log.debug(f'Done setting up the web hook. Secret: {self._secret}')
 
     def process_incoming_message(self):
         """
@@ -181,7 +230,7 @@ class BotWebhook(Flask):
         # validate signature
         raw = request.get_data()
         # Let's create the SHA1 signature
-        # based on the request body JSON (raw) and our passphrase (key)
+        # based on the request body JSON (raw) and our passphrase (secret)
         hashed = hmac.new(self._secret.encode(), raw, hashlib.sha1)
         validatedSignature = hashed.hexdigest()
         signature = request.headers.get('X-Spark-Signature')
@@ -196,11 +245,16 @@ class BotWebhook(Flask):
         email = event.data.personEmail
         if self._allowed_emails and email not in self._allowed_emails:
             log.debug(f'{email} not allowed. Skipping message')
-        # get message and ..
+        # do the time consuming stuff in a thread: get message and ..
         self._pool.submit(self.get_message_details_and_call, message_id=event.data.id)
         return 'ok'
 
     def get_message_details_and_call(self, message_id: str):
+        """
+        Get messag based on message id and call the callback
+        :param message_id:
+        :return:
+        """
         log.debug('Getting message details')
         message = self._api.messages.get(messageId=message_id)
         self._message_callback(message)
