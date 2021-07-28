@@ -53,7 +53,7 @@ class BotMessageProcessor:
         :return:
         """
         with requests.Session() as session:
-            for _ in range(10):
+            for _ in range(60):
                 with session.get(url=file_url, headers={'Authorization': f'Bearer {api.access_token}'},
                                  stream=True) as response:
                     if response.status_code == 423:
