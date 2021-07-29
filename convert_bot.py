@@ -57,7 +57,8 @@ class BotMessageProcessor:
                 with session.get(url=file_url, headers={'Authorization': f'Bearer {api.access_token}'},
                                  stream=True) as response:
                     if response.status_code == 423:
-                        retry = int(response.headers.get('retry-after', '10'))
+                        retry = int(response.headers.get('retry-after', '1'))
+                        retry = max(retry, 10)
                         cd_header = response.headers.get('content-disposition', None)
                         _, params = cgi.parse_header(cd_header)
                         file_name = params['filename']
