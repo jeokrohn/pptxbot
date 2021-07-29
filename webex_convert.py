@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple
 from zipfile import ZipFile, ZIP_DEFLATED
 import logging
 from lxml import etree
+from collections import defaultdict
 
 log = logging.getLogger(__name__)
 
@@ -16,10 +17,18 @@ class PresentationRel:
         with zip_file.open(name=self.FILE) as rel_file:
             tree = etree.parse(rel_file)
         root = tree.getroot()
+        data = defaultdict(list)
         for child in root:
             target = child.attrib['Target']
             var = child.attrib['Type'].split('/')[-1]
-            self.__dict__[var] = target
+            data[var].append(target)
+        for k, v in sorted((k, v) for k, v in data.items()):
+            if len(v) == 1:
+                v = v[0]
+            else:
+                v.sort()
+            self.__dict__[k] = v
+            log.debug(f'presentation rel: {k}={v}')
 
 
 def read_color_map(zip_file: ZipFile, file_name: str) -> Tuple[str, Dict[str, str]]:
@@ -133,7 +142,7 @@ def convert_pptx_to_rgb(input_file, output_file):
         # theme is defined in the presentation rels
         rel = PresentationRel(input_pptx_file)
         theme_name = f'ppt/{rel.theme}'
-        theme = read_color_map(zip_file=input_pptx_file,file_name=theme_name)
+        theme = read_color_map(zip_file=input_pptx_file, file_name=theme_name)
         color_map = theme[1]
 
         new_file_data = []
