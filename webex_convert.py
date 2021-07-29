@@ -3,8 +3,23 @@
 import re
 from typing import Dict, List, Tuple
 from zipfile import ZipFile, ZIP_DEFLATED
-
+import logging
 from lxml import etree
+
+log = logging.getLogger(__name__)
+
+
+class PresentationRel:
+    FILE = 'ppt/_rels/presentation.xml.rels'
+
+    def __init__(self, zip_file: ZipFile):
+        with zip_file.open(name=self.FILE) as rel_file:
+            tree = etree.parse(rel_file)
+        root = tree.getroot()
+        for child in root:
+            target = child.attrib['Target']
+            var = child.attrib['Type'].split('/')[-1]
+            self.__dict__[var] = target
 
 
 def read_color_map(zip_file: ZipFile, file_name: str) -> Tuple[str, Dict[str, str]]:
@@ -26,6 +41,8 @@ def read_color_map(zip_file: ZipFile, file_name: str) -> Tuple[str, Dict[str, st
         tag = color.tag.split('}')[-1]
         srgb = color[0].get('val')
         rgb_map[tag] = srgb
+    for tag, rgb in rgb_map.items():
+        log.debug(f'color map {file_name}, {name}: {tag}->{rgb}')
     return name, rgb_map
 
 
@@ -87,8 +104,13 @@ def convert(content, color_map):
 
     for target in targets:
         value = target.get('val')
-        value = PRE_MAP.get(value, value)
-        rgb = color_map.get(value)
+        pm_value = PRE_MAP.get(value, value)
+
+        if pm_value != value:
+            # log.debug(f'pre map {value}->{pm_value}')
+            pass
+        rgb = color_map.get(pm_value)
+        # log.debug(f'color map {pm_value}->{rgb}')
         if rgb is None:
             # unknown theme color name?
             continue
@@ -108,9 +130,11 @@ def convert_pptx_to_rgb(input_file, output_file):
     :return:
     """
     with ZipFile(input_file) as input_pptx_file:
-        schemes = color_schemes(zip_file=input_pptx_file)
-        # color map of the 1st theme in the file
-        color_map = schemes[0][1]
+        # theme is defined in the presentation rels
+        rel = PresentationRel(input_pptx_file)
+        theme_name = f'ppt/{rel.theme}'
+        theme = read_color_map(zip_file=input_pptx_file,file_name=theme_name)
+        color_map = theme[1]
 
         new_file_data = []
 
@@ -146,6 +170,8 @@ def print_usage():
 
 
 if __name__ == '__main__':
+
+    logging.basicConfig(level=logging.DEBUG)
     from sys import argv
 
     if len(argv) == 2:
