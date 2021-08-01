@@ -1,21 +1,22 @@
 #!/usr/bin/env python
-import cmd2
-import sys
 import argparse
-import glob
-import os
-import pptx
-import xml.etree.ElementTree as ET
-import pptxutil
-import re
-import itertools
-import bs4
 import enum
+import glob
+import itertools
+import os
+import re
+import sys
+import xml.etree.ElementTree as ET
+from typing import List, Callable, Optional
 from zipfile import ZipFile
+
+import bs4
+import cmd2
+import pptx
 from lxml import etree
 
-
-from typing import List, Callable, Optional
+import pptxutil
+from pptxutil import PPTXHelper
 
 TEMPLATE_PATH = 'templates'
 
@@ -397,6 +398,42 @@ class PPTApp(cmd2.Cmd):
                     slide_content = slide_file.read()
                     rpr_info(slide=slide, content=slide_content)
         return
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('presentation', help='presentation to work on', completer=_pptx_completer)
+
+    @cmd2.with_category('PPT')
+    @cmd2.with_argparser(parser)
+    def do_rels(self, arg: argparse.Namespace):
+        """
+        Analyze rels of PPTX
+        """
+        ppt_path = arg.presentation
+        if not os.path.isfile(ppt_path):
+            self.perror(f'File "{ppt_path}" not found.')
+            return
+        if os.path.splitext(ppt_path)[1].lower() != '.pptx':
+            self.perror(f'File "{ppt_path}" is not a PPTX file.')
+            return
+
+        self.poutput('Slide dependencies:')
+        with PPTXHelper(file=ppt_path) as ppt_file:
+            for s_name, slide in ppt_file.slides.items():
+                slide_layout = ppt_file.slide_layouts[slide.rel.slide_layout]
+                slide_master = slide_layout.rel.slide_master
+                self.poutput(f'{s_name}: slide layout {slide.rel.slide_layout} master {slide_master}')
+
+            self.poutput('\n' * 3)
+            p_rel = ppt_file.presentation_rel
+            self.poutput(f'Presentation rel: {p_rel}')
+            c_spec = ppt_file.color_spec
+            self.poutput()
+            self.poutput(f' Color spec: {c_spec}')
+
+            for slide in p_rel.slide:
+                slide_name = f'ppt/{slide}'
+                slide_rel = ppt_file.slide_rel(slide_name=slide_name)
+                self.poutput(f'{slide}: {slide_rel}')
 
 
 if __name__ == '__main__':
