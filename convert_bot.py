@@ -33,6 +33,11 @@ load_dotenv()
 
 log = logging.getLogger(__name__)
 
+# should the bot validate webhook message signatures?
+# if enabled the 1st message sent to the bot after coming back from sleep is dropped
+# b/c the random secret doesn't match
+VALIDATE_MESSAGE_SIGNATURE = False
+
 
 class BotMessageProcessor:
     """
@@ -231,16 +236,17 @@ class BotWebhook(Flask):
         Handle message.created events
         :return:
         """
-        # validate signature
-        raw = request.get_data()
-        # Let's create the SHA1 signature
-        # based on the request body JSON (raw) and our passphrase (secret)
-        hashed = hmac.new(self._secret.encode(), raw, hashlib.sha1)
-        validatedSignature = hashed.hexdigest()
-        signature = request.headers.get('X-Spark-Signature')
-        if signature != validatedSignature:
-            log.warning('signature mismatch: ignore')
-            return 'ok'
+        if VALIDATE_MESSAGE_SIGNATURE:
+            # validate signature
+            raw = request.get_data()
+            # Let's create the SHA1 signature
+            # based on the request body JSON (raw) and our passphrase (secret)
+            hashed = hmac.new(self._secret.encode(), raw, hashlib.sha1)
+            validatedSignature = hashed.hexdigest()
+            signature = request.headers.get('X-Spark-Signature')
+            if signature != validatedSignature:
+                log.warning('signature mismatch: ignore')
+                return 'ok'
         data = request.json
         event = webexteamssdk.WebhookEvent(data)
         if event.data.personId == self.me_id:
@@ -255,7 +261,7 @@ class BotWebhook(Flask):
 
     def get_message_details_and_call(self, message_id: str):
         """
-        Get messag based on message id and call the callback
+        Get message based on message id and call the callback
         :param message_id:
         :return:
         """
