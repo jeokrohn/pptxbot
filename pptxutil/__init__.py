@@ -1,8 +1,8 @@
 import logging
 import re
 import zipfile
-from collections import Mapping
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import Dict, Tuple, List, get_origin
 

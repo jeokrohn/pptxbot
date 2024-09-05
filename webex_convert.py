@@ -79,6 +79,7 @@ PRE_MAP = {
 def convert(content, color_map):
     """
     Convert a single XML. Replace all references to theme colors with actual RGB colors
+
     :param content: XML file contents
     :param color_map: color map from a PPT theme
     :return:

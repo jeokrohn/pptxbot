@@ -1,25 +1,33 @@
 import asyncio
-import base64
-import functools
 import json
 import logging
 import os
-from typing import Optional, Callable, List, Coroutine
+from base64 import b64decode, b64encode
+from dataclasses import dataclass
+from typing import Optional, Callable, List
 
 import aiohttp
-import webexteamssdk
+import wxc_sdk
+from wxc_sdk.as_api import AsWebexSimpleApi
 
 WDM_DEVICES = 'https://wdm-a.wbx2.com/wdm/api/v1/devices'
 
 log = logging.getLogger(__name__)
 
-MessageCallback = Callable[[webexteamssdk.Message], None]
+MessageCallback = Callable[[wxc_sdk.messages.Message], None]
 
 
+@dataclass(init=False, repr=False)
 class BotSocket:
     """
     Bot helper based on Webex Teams device registration and Websocket
     """
+    _token: str
+    _device_name: str
+    _message_callback: MessageCallback
+    _session: aiohttp.ClientSession
+    _allowed_emails: set[str]
+    _async_api: AsWebexSimpleApi
 
     def __init__(self,
                  access_token: str,
@@ -28,8 +36,6 @@ class BotSocket:
         self._token = access_token
         self._device_name = os.path.basename(os.path.splitext(__file__)[0])
         self._message_callback = message_callback
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._api = webexteamssdk.WebexTeamsAPI(access_token=access_token)
         self._allowed_emails = set(allowed_emails or list())
 
     @property
@@ -79,16 +85,16 @@ class BotSocket:
         device = await self.post(url=WDM_DEVICES, json=device)
         return device
 
-    async def get_message(self, message_id: str) -> Optional[webexteamssdk.Message]:
+    async def get_message(self, message_id: str) -> Optional[wxc_sdk.messages.Message]:
         try:
-            r = await self.get(url=f'https://api.ciscospark.com/v1/messages/{message_id}')
-            return webexteamssdk.Message(r)
+            return await self._async_api.messages.details(message_id)
         except Exception:
             return None
 
-    async def process_message(self, message: webexteamssdk.Message):
+    # noinspection PyAsyncCall
+    async def process_message(self, message: wxc_sdk.messages.Message):
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._message_callback, message)
+        loop.run_in_executor(None, self._message_callback, message)
 
     def run(self):
         async def process(message: aiohttp.WSMessage, ignore_emails: List[str]) -> None:
@@ -117,10 +123,15 @@ class BotSocket:
                 return
 
             message_id = activity['id']
+            # target.globalId has the base64 room id
+            room_id = b64decode(activity['target']['globalId']).decode()
+            id_prefix = '/'.join(room_id.split('/')[:3])
+            message_id = b64encode(f'{id_prefix}/MESSAGE/{message_id}'.encode()).decode()
+
             message = await self.get_message(message_id=message_id)
             if message is None:
                 return
-            log.debug(f'Message from: {message.personEmail}')
+            log.debug(f'Message from: {message.person_email}')
             await self.process_message(message)
             return
 
@@ -132,6 +143,7 @@ class BotSocket:
             received on the websocket
             """
             self._session = aiohttp.ClientSession()
+            self._async_api = AsWebexSimpleApi(tokens=self._token)
             while True:
                 # find/create device registration
                 device = await self.find_device()
@@ -143,6 +155,7 @@ class BotSocket:
 
                 # we need to ignore messages from our own email addresses
                 me = await self.get(url='https://api.ciscospark.com/v1/people/me')
+                log.debug(f'Got me: {me.emails[0]}')
                 ignore_emails = me['emails']
 
                 wss_url = device['webSocketUrl']
@@ -150,6 +163,7 @@ class BotSocket:
                 async with self._session.ws_connect(url=wss_url, headers={'Authorization': self.auth}) as wss:
                     async for message in wss:
                         log.debug(f'got message from websocket: {message}')
+                        # noinspection PyAsyncCall
                         asyncio.create_task(process(message, ignore_emails))
                     # async for
                 # async with

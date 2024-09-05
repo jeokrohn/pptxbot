@@ -32,6 +32,7 @@ def workon_template(method: Callable):
     :param method:
     :return:
     """
+
     def decorator(ppt_app: 'PPTApp', *args, **kwargs):
         if ppt_app._work_on != WorkItem.template:
             ppt_app.perror('Need to select a template first')
@@ -39,6 +40,7 @@ def workon_template(method: Callable):
         return method(ppt_app, *args, **kwargs)
 
     return cmd2.with_category('PPT')(decorator)
+
 
 class PPTApp(cmd2.Cmd):
 
@@ -221,6 +223,7 @@ class PPTApp(cmd2.Cmd):
         :param endidx:
         :return:
         """
+
         def pptx_filter(path: str):
             """
             Only allow paths and PPTX files
@@ -229,7 +232,8 @@ class PPTApp(cmd2.Cmd):
             """
             return os.path.isdir(path) or os.path.isfile(path) and os.path.splitext(path)[1].lower() == '.pptx'
 
-        options = cmd2.Cmd.path_complete(self, text=text, line=line, begidx=begidx, endidx=endidx, path_filter=pptx_filter)
+        options = cmd2.Cmd.path_complete(self, text=text, line=line, begidx=begidx, endidx=endidx,
+                                         path_filter=pptx_filter)
         return options
 
     parser = argparse.ArgumentParser()
@@ -246,7 +250,7 @@ class PPTApp(cmd2.Cmd):
         # open PPT
         # get scheme colors
         # for each slide
-        # replacee color specs that reference a scheme color to an RGB color
+        # replace color specs that reference a scheme color to an RGB color
         ppt_path = arg.presentation
         if not os.path.isfile(ppt_path):
             self.perror(f'File "{ppt_path}" not found.')
@@ -260,7 +264,7 @@ class PPTApp(cmd2.Cmd):
         color_tags = sorted(
             set(itertools.chain.from_iterable((c_specs.keys() for name, c_specs in themes_and_color_specs.values()))))
 
-        # print head line with all theme names
+        # print headline with all theme names
         theme_names = [name for name, _ in themes_and_color_specs.values()]
         name_len = max(map(len, theme_names))
         name_len = max(7, name_len)

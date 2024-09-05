@@ -1,0 +1,24 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+bs4 = "*"
+lxml = "*"
+python-pptx = "*"
+cmd2 = "*"
+gnureadline = "*"
+xmltodict = "*"
+aiohttp = "*"
+python-dotenv = "*"
+requests = "*"
+flask = "*"
+gunicorn = "*"
+inflection = "*"
+wxc-sdk = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.11"
