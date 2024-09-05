@@ -112,7 +112,8 @@ class BotSocket:
             if data['eventType'] != 'conversation.activity':
                 return
             activity = data['activity']
-            if activity['verb'] not in ['post', 'share']:
+            if (verb := activity['verb']) not in ['post', 'share']:
+                log.debug(f'ignoring activity with verb: {verb}')
                 return
             email = activity['actor']['emailAddress']
             if email in ignore_emails:
@@ -124,6 +125,7 @@ class BotSocket:
 
             message_id = activity['id']
             # target.globalId has the base64 room id
+            # we can use that build a base64 message id
             room_id = b64decode(activity['target']['globalId']).decode()
             id_prefix = '/'.join(room_id.split('/')[:3])
             message_id = b64encode(f'{id_prefix}/MESSAGE/{message_id}'.encode()).decode()
@@ -154,9 +156,9 @@ class BotSocket:
                     device = await self.create_device()
 
                 # we need to ignore messages from our own email addresses
-                me = await self.get(url='https://api.ciscospark.com/v1/people/me')
-                log.debug(f'Got me: {me.emails[0]}')
-                ignore_emails = me['emails']
+                me = await self._async_api.people.me()
+                log.debug(f'Got me: {", ".join(me.emails)}')
+                ignore_emails = me.emails
 
                 wss_url = device['webSocketUrl']
                 log.debug(f'WSS url: {wss_url}')
